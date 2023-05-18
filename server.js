@@ -4,6 +4,7 @@ const connectDB = require("./config/db");
 const PORT = process.env.PORT || 8000;
 
 const courseRoutes = require("./routes/courseRoutes");
+const userRoutes = require("./routes/userRoutes");
 
 const app = express();
 
@@ -15,6 +16,7 @@ connectDB();
 
 // routes
 app.use("/api/courses", courseRoutes);
+app.use("/api/users", userRoutes);
 
 // testing api
 app.get("/", (req, res) => {
