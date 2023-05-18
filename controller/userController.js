@@ -33,6 +33,63 @@ const registerUser = async (req, res) => {
   }
 };
 
-const loginUser = async (req, res) => {};
+const loginUser = async (req, res) => {
+  try {
+    const user = await User.findOne({ email: req.body.email });
+    if (user && bcrcypt.compareSync(req.body.password, user.password)) {
+      const accessToken = generateToken(user);
+      res.send({
+        message: "Logged in successfully",
+        status: 200,
+        user,
+        accessToken,
+      });
+    } else {
+      res.status(401).send({
+        message: "Invalid user or password",
+        status: 401,
+      });
+    }
+  } catch (err) {
+    res.status(500).send({
+      message: err.message,
+    });
+  }
+};
 
-module.exports = { registerUser };
+const getAllUsers = async (req, res) => {
+  try {
+    const users = await User.find({});
+    res.status(200).send(users);
+  } catch (err) {
+    res.status(500).send({
+      message: err.message,
+    });
+  }
+};
+
+const deleteUser = async (req, res) => {
+  try {
+    await User.findOneAndDelete({ _id: req.params.id })
+      .exec()
+      .then((result) => {
+        res
+          .status(200)
+          .send({
+            message: `${result.name} is successfully removed!`,
+            status: 200,
+          });
+      })
+      .catch((err) => {
+        res.send({
+          message: err.message,
+        });
+      });
+  } catch (err) {
+    res.status(500).send({
+      message: err.message,
+    });
+  }
+};
+
+module.exports = { registerUser, loginUser, getAllUsers, deleteUser };
