@@ -1,26 +1,88 @@
 const User = require("../models/Users");
 const bcrcypt = require("bcryptjs");
-const { generateToken } = require("../utils/auth");
+const randomstring = require("randomstring");
+const { generateToken, sendVerificationCode } = require("../utils/auth");
 
 const registerUser = async (req, res) => {
   try {
     const isExist = await User.findOne({ email: req.body.email });
 
-    if (isExist) {
+    const isVerified = isExist?.isVerified;
+
+    if (isExist && isVerified === true) {
       return res.status(403).send({
         message: `${req.body.email} is already Exist!`,
         status: 403,
       });
+    } else if (isExist && isVerified === false) {
+      const password = bcrcypt.hashSync(req.body.password);
+      const otp = randomstring.generate({ length: 6, charset: "numeric" });
+
+      isExist.password = password;
+      isExist.otp = otp;
+
+      const updatedUser = await isExist.save();
+
+      await sendVerificationCode(updatedUser, otp);
+
+      res.status(200).send({
+        message: "We have sent you verification code. Please check your email!",
+        status: 200,
+      });
     } else {
+      const otp = randomstring.generate({ length: 6, charset: "numeric" });
       const newUser = new User({
         name: req.body.name,
         email: req.body.email,
         password: bcrcypt.hashSync(req.body.password),
+        otp,
       });
 
       const user = await newUser.save();
-      const token = generateToken(user);
+
+      // const token = generateToken(user);
+      // res.send({
+      //   user,
+      //   accessToken: token,
+      //   status: 200,
+      // });
+      await sendVerificationCode(user, otp);
+      res.status(200).send({
+        message: "We have sent you verification code. Please check your email!",
+        status: 200,
+      });
+    }
+  } catch (err) {
+    res.status(500).send({
+      message: err.message,
+    });
+  }
+};
+
+const emailVerification = async (req, res) => {
+  try {
+    const { email, otp } = req.body;
+    const user = await User.findOne({ email });
+
+    if (!user) {
+      return res.status(400).send({
+        message: "User not found!",
+        status: 200,
+      });
+    }
+
+    if (user?.otp !== otp) {
+      return res.status(400).send({
+        message: "Invalid OTP",
+        status: 200,
+      });
+    } else {
+      user.isVerified = true;
+      await user.save();
+
+      const token = await generateToken(user);
       res.send({
+        message: "User Verified successfully",
         user,
         accessToken: token,
         status: 200,
@@ -36,9 +98,19 @@ const registerUser = async (req, res) => {
 const loginUser = async (req, res) => {
   try {
     const user = await User.findOne({ email: req.body.email });
-    if (user && bcrcypt.compareSync(req.body.password, user.password)) {
+
+    if (user?.isVerified === false) {
+      return res.status(401).send({
+        message: "Please Verify you email.",
+      });
+    }
+    if (
+      user &&
+      bcrcypt.compareSync(req.body.password, user.password) &&
+      user?.isVerified === true
+    ) {
       const accessToken = generateToken(user);
-      res.send({
+      return res.send({
         message: "Logged in successfully",
         status: 200,
         user,
@@ -73,12 +145,10 @@ const deleteUser = async (req, res) => {
     await User.findOneAndDelete({ _id: req.params.id })
       .exec()
       .then((result) => {
-        res
-          .status(200)
-          .send({
-            message: `${result.name} is successfully removed!`,
-            status: 200,
-          });
+        res.status(200).send({
+          message: `${result.name} is successfully removed!`,
+          status: 200,
+        });
       })
       .catch((err) => {
         res.send({
@@ -92,4 +162,10 @@ const deleteUser = async (req, res) => {
   }
 };
 
-module.exports = { registerUser, loginUser, getAllUsers, deleteUser };
+module.exports = {
+  registerUser,
+  loginUser,
+  getAllUsers,
+  deleteUser,
+  emailVerification,
+};
